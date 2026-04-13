@@ -50,11 +50,9 @@ class HybridAlgorithmNode(Node):
         self.y   = 0.0
         self.yaw = 0.0
 
-        # ── Laser readings (m) — min distance in each sector ───────────
-        self.front       = 10.0   # 0° ± 12°
-        self.front_left  = 10.0   # ~45°
-        self.left        = 10.0   # 90° ± 10°
-        self.front_right = 10.0   # ~315°
+        # ── Laser readings (m) ─────────────────────────────────────────
+        self.front     = 10.0   # front cone
+        self.left_min  = 10.0   # entire left hemisphere
 
         # ── Bug2 state ──────────────────────────────────────────────────
         self.state            = 'EXPLORING'
@@ -64,10 +62,8 @@ class HybridAlgorithmNode(Node):
         self.dist_traveled_wf = 0.0
 
         # ── Tuning ──────────────────────────────────────────────────────
-        self.OBS_THRESH  = 0.40   # obstacle trigger for front
-        self.WALL_CLOSE  = 0.25   # left wall: too close
-        self.WALL_GOOD   = 0.40   # left wall: sweet-spot upper bound
-        self.WALL_FAR    = 0.60   # left wall: outer-corner threshold
+        self.OBS_THRESH  = 0.45   # front obstacle threshold
+        self.TARGET_DIST = 0.35   # desired distance from left wall
         self.M_THRESH    = 0.15   # "on M-line" tolerance (m)
         self.MIN_WF_DIST = 0.80   # min wall-follow travel before exit check
 
@@ -121,10 +117,11 @@ class HybridAlgorithmNode(Node):
                     if 0 <= i < n and math.isfinite(msg.ranges[i])]
             return min(vals) if vals else 10.0
 
-        self.front       = _min(list(range(0, 12)) + list(range(n-12, n)))
-        self.front_left  = _min(range(40, 55))
-        self.left        = _min(range(80, 100))
-        self.front_right = _min(range(n-55, n-40))
+        # Front cone: -20 to +20 degrees
+        self.front = _min(list(range(0, 20)) + list(range(n-20, n)))
+        
+        # Left hemisphere: +20 to +160 degrees
+        self.left_min = _min(range(20, 160))
 
         if self.front < 0.15 and not self.coll_cooldown:
             self.wall_collisions += 1
@@ -156,44 +153,32 @@ class HybridAlgorithmNode(Node):
 
     def _wall_follow(self):
         """
-        Classic left-hand rule with correct outer-corner handling.
-
-        Priority order:
-          1. Front blocked            → turn right (CW) in place
-          2. Left wall gone (corner)  → turn left + forward  ← KEY FIX
-          3. Left too close           → nudge right
-          4. Left sweet-spot          → cruise straight
-          5. Drifting from left wall  → nudge left
+        Robust Proportional (P) controller using the entire left hemisphere.
+        Maintains a smooth distance, naturally rounding outer corners without losing the wall.
         """
         twist = Twist()
 
         if self.front < self.OBS_THRESH:
-            # Obstacle ahead — rotate right until clear
+            # Obstacle in front — hard right turn in place
             twist.linear.x  = 0.0
-            twist.angular.z = -0.6
-
-        elif self.left > self.WALL_FAR:
-            # ── OUTER CORNER ─────────────────────────────────────────
-            # Left wall has disappeared: robot has gone past the end of
-            # a wall segment.  Turn LEFT while creeping forward so it
-            # rounds the corner and re-acquires the wall.
-            twist.linear.x  = 0.12
-            twist.angular.z = 0.55
-
-        elif self.left < self.WALL_CLOSE:
-            # Too close — nudge right
+            twist.angular.z = -0.8
+        elif self.left_min > 0.80:
+            # Wall completely lost (outer corner)
             twist.linear.x  = 0.15
-            twist.angular.z = -0.3
-
-        elif self.left <= self.WALL_GOOD:
-            # Sweet spot — cruise straight
-            twist.linear.x  = 0.25
-            twist.angular.z = 0.0
-
+            twist.angular.z = 0.65
         else:
-            # WALL_GOOD < left ≤ WALL_FAR: drifting, gentle left
-            twist.linear.x  = 0.20
-            twist.angular.z = 0.35
+            # Wall detected, maintain target distance
+            err = self.left_min - self.TARGET_DIST
+            
+            # P-controller for steering
+            Kp = 2.0
+            w = Kp * err
+            
+            # Cap angular velocity
+            w = max(-0.6, min(0.6, w))
+            
+            twist.linear.x  = 0.25
+            twist.angular.z = w
 
         return twist
 

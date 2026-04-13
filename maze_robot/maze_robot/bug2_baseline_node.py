@@ -36,18 +36,13 @@ class Bug2BaselineNode(Node):
         self.y   = 0.0
         self.yaw = 0.0
 
-        self.front       = 10.0
-        self.front_left  = 10.0
-        self.left        = 10.0
-        self.front_right = 10.0
-        self.right       = 10.0
+        # ── Laser readings (m) ─────────────────────────────────────────
+        self.front     = 10.0
+        self.left_min  = 10.0
 
-        self.state = 'EXPLORING'
-
-        self.OBS_THRESH = 0.42
-        self.WALL_CLOSE = 0.28
-        self.WALL_GOOD  = 0.42
-        self.WALL_FAR   = 0.62
+        self.OBS_THRESH  = 0.45
+        self.TARGET_DIST = 0.35
+        self.state       = 'EXPLORING'
 
         self.path_msg          = Path()
         self.path_msg.header.frame_id = "odom"
@@ -91,11 +86,8 @@ class Bug2BaselineNode(Node):
                     if 0 <= i < n and math.isfinite(msg.ranges[i])]
             return min(vals) if vals else 10.0
 
-        self.front       = _min(list(range(0, 12)) + list(range(n-12, n)))
-        self.front_left  = _min(range(40, 55))
-        self.left        = _min(range(80, 100))
-        self.front_right = _min(range(n-55, n-40))
-        self.right       = _min(range(260, 280))
+        self.front = _min(list(range(0, 20)) + list(range(n-20, n)))
+        self.left_min = _min(range(20, 160))
 
         if self.front < 0.15 and not self.coll_cooldown:
             self.wall_collisions += 1
@@ -152,22 +144,19 @@ class Bug2BaselineNode(Node):
                     twist.angular.z = 0.1 * err
 
         else:  # WALL_FOLLOWING — pure left-hand rule, never exits
-            if self.front < 0.40:
+            if self.front < self.OBS_THRESH:
                 twist.linear.x  = 0.0
-                twist.angular.z = -0.6
-            elif self.left > self.WALL_FAR:
-                # Outer corner: turn left to round it
-                twist.linear.x  = 0.12
-                twist.angular.z = 0.55
-            elif self.left < self.WALL_CLOSE:
+                twist.angular.z = -0.8
+            elif self.left_min > 0.80:
                 twist.linear.x  = 0.15
-                twist.angular.z = -0.3
-            elif self.left <= self.WALL_GOOD:
-                twist.linear.x  = 0.25
-                twist.angular.z = 0.0
+                twist.angular.z = 0.65
             else:
-                twist.linear.x  = 0.20
-                twist.angular.z = 0.35
+                err = self.left_min - self.TARGET_DIST
+                Kp = 2.0
+                w = Kp * err
+                w = max(-0.6, min(0.6, w))
+                twist.linear.x  = 0.25
+                twist.angular.z = w
 
         self.cmd_pub.publish(twist)
 
