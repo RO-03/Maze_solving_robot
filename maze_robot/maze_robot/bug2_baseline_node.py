@@ -37,8 +37,10 @@ class Bug2BaselineNode(Node):
         self.yaw = 0.0
 
         # ── Laser readings (m) ─────────────────────────────────────────
-        self.front     = 10.0
+        self.ray_front = 10.0
         self.left_min  = 10.0
+        self.ray_left  = 10.0
+        self.ray_fl    = 10.0
 
         self.OBS_THRESH  = 0.45
         self.TARGET_DIST = 0.35
@@ -86,13 +88,15 @@ class Bug2BaselineNode(Node):
                     if 0 <= i < n and math.isfinite(msg.ranges[i])]
             return min(vals) if vals else 10.0
 
-        self.front = _min(list(range(0, 20)) + list(range(n-20, n)))
-        self.left_min = _min(range(20, 160))
+        self.ray_front = _min(list(range(0, 15)) + list(range(n-15, n)))
+        self.ray_left = msg.ranges[90] if math.isfinite(msg.ranges[90]) else 10.0
+        self.ray_fl   = msg.ranges[45] if math.isfinite(msg.ranges[45]) else 10.0
+        self.left_min = _min(range(15, 165))
 
-        if self.front < 0.15 and not self.coll_cooldown:
+        if self.ray_front < 0.15 and not self.coll_cooldown:
             self.wall_collisions += 1
             self.coll_cooldown = True
-        elif self.front > 0.25:
+        elif self.ray_front > 0.25:
             self.coll_cooldown = False
 
     def _norm(self, a):
@@ -124,7 +128,7 @@ class Bug2BaselineNode(Node):
         twist = Twist()
 
         if self.state == 'EXPLORING':
-            if self.front < self.OBS_THRESH:
+            if self.ray_front < self.OBS_THRESH:
                 self.mode_switches += 1
                 self.state = 'WALL_FOLLOWING'
                 sm = String(); sm.data = 'WALL_FOLLOWING'
@@ -144,19 +148,31 @@ class Bug2BaselineNode(Node):
                     twist.angular.z = 0.1 * err
 
         else:  # WALL_FOLLOWING — pure left-hand rule, never exits
-            if self.front < self.OBS_THRESH:
+            if self.ray_front < self.OBS_THRESH:
                 twist.linear.x  = 0.0
                 twist.angular.z = -0.8
-            elif self.left_min > 0.80:
+            elif self.ray_left < 3.0 and self.ray_fl < 3.0:
+                theta = math.radians(45.0)
+                numerator   = self.ray_fl * math.cos(theta) - self.ray_left
+                denominator = self.ray_fl * math.sin(theta)
+                alpha = math.atan2(numerator, denominator)
+                
+                Dt = self.ray_left * math.cos(alpha)
+                lookahead = 0.3
+                D_pred = Dt + lookahead * math.sin(alpha)
+                
+                err = self.TARGET_DIST - D_pred
+                w = -2.5 * err
+                w = max(-0.6, min(0.6, w))
+                
+                twist.linear.x  = 0.25
+                twist.angular.z = w
+            elif self.left_min > 0.70:
                 twist.linear.x  = 0.15
                 twist.angular.z = 0.65
             else:
-                err = self.left_min - self.TARGET_DIST
-                Kp = 2.0
-                w = Kp * err
-                w = max(-0.6, min(0.6, w))
-                twist.linear.x  = 0.25
-                twist.angular.z = w
+                twist.linear.x  = 0.20
+                twist.angular.z = 0.30
 
         self.cmd_pub.publish(twist)
 

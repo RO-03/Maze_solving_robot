@@ -117,16 +117,24 @@ class HybridAlgorithmNode(Node):
                     if 0 <= i < n and math.isfinite(msg.ranges[i])]
             return min(vals) if vals else 10.0
 
-        # Front cone: -20 to +20 degrees
-        self.front = _min(list(range(0, 20)) + list(range(n-20, n)))
+        # Gather specific ray indices for geometric wall tracking
+        # n is 360, so 1 degree per index
+        self.ray_front = _min(list(range(0, 15)) + list(range(n-15, n)))
         
-        # Left hemisphere: +20 to +160 degrees
-        self.left_min = _min(range(20, 160))
+        # We need two rays to compute wall angle and distance
+        # Ray 1: pure left (90 deg)
+        self.ray_left = msg.ranges[90] if math.isfinite(msg.ranges[90]) else 10.0
+        
+        # Ray 2: front-left (45 deg)
+        self.ray_fl   = msg.ranges[45] if math.isfinite(msg.ranges[45]) else 10.0
 
-        if self.front < 0.15 and not self.coll_cooldown:
+        # Overall left hemisphere min (for general safety/corner detection)
+        self.left_min = _min(range(15, 165))
+
+        if self.ray_front < 0.15 and not self.coll_cooldown:
             self.wall_collisions += 1
             self.coll_cooldown = True
-        elif self.front > 0.25:
+        elif self.ray_front > 0.25:
             self.coll_cooldown = False
 
     # ────────────────────────── Helpers ─────────────────────────────────
@@ -153,32 +161,52 @@ class HybridAlgorithmNode(Node):
 
     def _wall_follow(self):
         """
-        Robust Proportional (P) controller using the entire left hemisphere.
-        Maintains a smooth distance, naturally rounding outer corners without losing the wall.
+        Geometrically exact PD wall follower.
+        Calculates wall angle (alpha) and projected distance, completely
+        eliminating the sensor-dropout wobble that causes infinite loops.
         """
         twist = Twist()
 
-        if self.front < self.OBS_THRESH:
+        if self.ray_front < self.OBS_THRESH:
             # Obstacle in front — hard right turn in place
             twist.linear.x  = 0.0
             twist.angular.z = -0.8
-        elif self.left_min > 0.80:
-            # Wall completely lost (outer corner)
-            twist.linear.x  = 0.15
-            twist.angular.z = 0.65
-        else:
-            # Wall detected, maintain target distance
-            err = self.left_min - self.TARGET_DIST
+            return twist
+
+        # Geometric projection (using 45 deg and 90 deg rays)
+        # alpha is angle of the wall relative to robot's heading
+        if self.ray_left < 3.0 and self.ray_fl < 3.0:
+            theta = math.radians(45.0)
+            numerator   = self.ray_fl * math.cos(theta) - self.ray_left
+            denominator = self.ray_fl * math.sin(theta)
+            alpha = math.atan2(numerator, denominator)
             
-            # P-controller for steering
-            Kp = 2.0
-            w = Kp * err
+            # Actual perpendicular distance to the wall
+            Dt = self.ray_left * math.cos(alpha)
             
+            # Predict distance slightly ahead to prevent overshoot
+            lookahead = 0.3
+            D_pred = Dt + lookahead * math.sin(alpha)
+            
+            err = self.TARGET_DIST - D_pred
+            
+            # PD control on predicted error
+            w = -2.5 * err
             # Cap angular velocity
             w = max(-0.6, min(0.6, w))
             
             twist.linear.x  = 0.25
             twist.angular.z = w
+
+        elif self.left_min > 0.70:
+            # Wall completely lost (outer corner)
+            twist.linear.x  = 0.15
+            twist.angular.z = 0.65
+        else:
+            # We see something on the left but not the two clean rays.
+            # Gentle curve left to re-acquire the rigid profile.
+            twist.linear.x  = 0.20
+            twist.angular.z = 0.30
 
         return twist
 
@@ -207,7 +235,7 @@ class HybridAlgorithmNode(Node):
 
         # ── EXPLORING ───────────────────────────────────────────────────
         if self.state == 'EXPLORING':
-            if self.front < self.OBS_THRESH:
+            if self.ray_front < self.OBS_THRESH:
                 # Record hit point and switch
                 self.hit_x, self.hit_y = self.x, self.y
                 self.hit_dist_goal     = self._dist_goal()
