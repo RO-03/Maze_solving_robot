@@ -80,7 +80,7 @@ def generate_launch_description():
         package=pkg_name, executable='sensor_node', output='screen',
         parameters=[{
             'use_sim_time': True, 'noise_std_dev': 0.02, 'add_noise': True,
-            'wall_enter_threshold': 0.38, 'wall_exit_threshold': 0.55,
+            'wall_enter_threshold': 0.38, 'wall_exit_threshold': 0.70,
             'front_cone_deg': 10, 'publish_rate': 20.0,
         }],
     )
@@ -90,7 +90,7 @@ def generate_launch_description():
         parameters=[{
             'use_sim_time': True,
             'goal_publish_rate': 1.0,
-            'min_frontier_size': 5,
+            'min_frontier_size': 15,
             'goal_arrival_radius': 0.4,
             'map_frame': 'map', 'robot_frame': 'base_footprint', 'use_tf': True,
         }],

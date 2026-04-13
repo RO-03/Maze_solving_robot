@@ -157,6 +157,11 @@ class FrontierNode(Node):
             wy = oy + (mean_row + 0.5) * res
             centroids.append((wx, wy))
 
+        # Filter frontiers that are too far away
+        MAX_FRONTIER_DIST = 6.0
+        centroids = [(wx, wy) for wx, wy in centroids
+                     if math.hypot(wx - self.robot_x, wy - self.robot_y) < MAX_FRONTIER_DIST]
+
         # Sort by Euclidean distance from robot (nearest-frontier heuristic)
         centroids.sort(key=lambda p: math.hypot(p[0] - self.robot_x,
                                                  p[1] - self.robot_y))

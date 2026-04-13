@@ -428,7 +428,9 @@ class HybridAlgorithmNode(Node):
             self.goal_x - self.x,
         )
         angle_diff = normalise_angle(angle_to_goal - self.yaw)
-        d_angle    = angle_diff - self.prev_angle_diff
+        
+        # MUST normalise difference to prevent massive derivative spikes on -pi/pi wrap-around
+        d_angle    = normalise_angle(angle_diff - self.prev_angle_diff)
         self.prev_angle_diff = angle_diff
 
         angular_cmd = self.kp * angle_diff + self.kd * d_angle
@@ -443,39 +445,39 @@ class HybridAlgorithmNode(Node):
             twist.linear.x  = 0.0
             twist.angular.z = angular_cmd
         else:
-            if abs(angle_diff) > 0.25:
-                # Large heading error – mostly rotate
+            if abs(angle_diff) > 0.4:
+                # Large heading error – mostly rotate to align
                 twist.linear.x  = 0.05
                 twist.angular.z = angular_cmd
             else:
-                # On track – drive forward, gentle steering
-                twist.linear.x  = self.max_lin
-                twist.angular.z = 0.5 * angular_cmd  # reduce for stability
+                # On track – smooth continuous drive proportional to straightness
+                twist.linear.x  = self.max_lin * max(0.3, 1.0 - 1.5 * abs(angle_diff))
+                twist.angular.z = angular_cmd
 
         return twist
 
     def _follow_wall(self) -> Twist:
-        """Left-hand wall-following (Bug2 style)."""
+        """Continuous smooth Left-hand wall-following (Proportional Controller)."""
         twist = Twist()
 
         if self.scan_front < self.front_stop:
-            # Obstacle directly ahead → pivot right in place
-            twist.linear.x  = 0.0 if self.scan_front < self.front_wedge else 0.05
-            twist.angular.z = -0.6
+            # Obstacle directly ahead → curve assertively away
+            twist.linear.x  = 0.0 if self.scan_front < self.front_wedge else 0.08
+            twist.angular.z = -self.max_ang * 0.8
         else:
-            side_err = self.scan_left - self.side_target
-            if abs(side_err) < self.side_tol:
-                # Good lateral distance – cruise forward
-                twist.linear.x  = self.max_lin * 0.85
-                twist.angular.z = 0.0
-            elif side_err < 0:
-                # Too close to left wall
-                twist.linear.x  = self.max_lin * 0.7
-                twist.angular.z = -0.4
-            else:
-                # Too far from left wall / lost it
-                twist.linear.x  = self.max_lin * 0.6
-                twist.angular.z = 0.5
+            # Smooth proportional controller for lateral wall distance
+            side_err    = self.scan_left - self.side_target
+            kp_wall     = 2.5  # Tuned for Gazebo physics
+            
+            # If side error is positive (too far left), turn left (+z) to get closer
+            angular_cmd = kp_wall * side_err
+            angular_cmd = max(-self.max_ang * 0.8, min(self.max_ang * 0.8, angular_cmd))
+            
+            # Dynamically lower speed if turning sharply to prevent wheel slip
+            linear_speed = self.max_lin * max(0.4, 1.0 - 0.5 * (abs(angular_cmd) / self.max_ang))
+            
+            twist.linear.x  = linear_speed
+            twist.angular.z = angular_cmd
 
         return twist
 
