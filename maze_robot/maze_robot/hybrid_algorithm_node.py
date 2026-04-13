@@ -179,29 +179,32 @@ class HybridAlgorithmNode(Node):
                 msg.data = True
                 self.resume_pub.publish(msg)
                 self.get_logger().info("Left Point reached! Resuming M-Line.")
+                # Reset immediately so the next 50ms timer tick cannot double-fire
+                self.hit_point_dist = float('inf')
+                self.robot_state = "EXPLORING"  # Local flip; state_callback will confirm
                 return # Skip control this cycle to let state switch
             
-            # Actually follow the wall
+            # Actually follow the wall (left-hand rule)
             if self.scan_front < 0.4:
-                # Obstacle in front, turn right mostly in place
+                # Obstacle in front — turn right in place
                 twist.linear.x = 0.0
                 twist.angular.z = -0.5
             else:
-                # Keep side wall around 0.35m away
                 if self.scan_left < 0.25:
-                    # Too close to left wall, move right slightly
-                    twist.linear.x = 0.2
+                    # Too close to left wall — nudge right
+                    twist.linear.x = 0.15
                     twist.angular.z = -0.3
-                elif self.scan_left > 0.45:
-                    # Losing left wall, move left to find it
-                    if self.scan_left > 1.0:
-                        twist.linear.x = 0.05
-                        twist.angular.z = 0.8  # Sharp turn for corners
-                    else:
-                        twist.linear.x = 0.15
-                        twist.angular.z = 0.5
+                elif self.scan_left < 0.55:
+                    # In the sweet spot — cruise straight
+                    twist.linear.x = 0.25
+                    twist.angular.z = 0.0
+                elif self.scan_left < 1.2:
+                    # Drifting away from left wall — gentle left
+                    twist.linear.x = 0.15
+                    twist.angular.z = 0.4
                 else:
-                    # Just right, cruise forward
+                    # No left wall in range at all (open area / corridor centre)
+                    # Just go straight — don't spin looking for a wall that's far away
                     twist.linear.x = 0.25
                     twist.angular.z = 0.0
 

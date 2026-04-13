@@ -56,7 +56,7 @@ class SensorNode(Node):
         
         current_time = self.get_clock().now().nanoseconds / 1e9
         if self.current_state == "EXPLORING" and min_front_dist < self.wall_threshold:
-            if current_time - self.last_switch_time > 1.5:  # Cooldown
+            if current_time - self.last_switch_time > 3.0:  # Cooldown
                 self.current_state = "WALL_FOLLOWING"
                 self.last_switch_time = current_time
                 self.get_logger().info(f"Sensor Node: Wall detected at {min_front_dist:.2f}m. Switching to WALL_FOLLOWING.")

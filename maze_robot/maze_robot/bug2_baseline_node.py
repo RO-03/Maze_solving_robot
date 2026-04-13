@@ -128,16 +128,16 @@ class Bug2BaselineNode(Node):
                 twist.angular.z = -0.5
             else:
                 if self.scan_left < 0.25:
-                    twist.linear.x = 0.2
+                    twist.linear.x = 0.15
                     twist.angular.z = -0.3
-                elif self.scan_left > 0.45:
-                    if self.scan_left > 1.0:
-                        twist.linear.x = 0.05
-                        twist.angular.z = 0.8
-                    else:
-                        twist.linear.x = 0.15
-                        twist.angular.z = 0.5
+                elif self.scan_left < 0.55:
+                    twist.linear.x = 0.25
+                    twist.angular.z = 0.0
+                elif self.scan_left < 1.2:
+                    twist.linear.x = 0.15
+                    twist.angular.z = 0.4
                 else:
+                    # No left wall nearby — go straight
                     twist.linear.x = 0.25
                     twist.angular.z = 0.0
 
