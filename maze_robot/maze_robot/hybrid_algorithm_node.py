@@ -194,9 +194,12 @@ class HybridAlgorithmNode(Node):
                     twist.angular.z = -0.3
                 elif self.scan_left > 0.45:
                     # Losing left wall, move left to find it
-                    # But if we completely lost it (>1.5m), we might need to turn sharply
-                    twist.linear.x = 0.15
-                    twist.angular.z = 0.5
+                    if self.scan_left > 1.0:
+                        twist.linear.x = 0.05
+                        twist.angular.z = 0.8  # Sharp turn for corners
+                    else:
+                        twist.linear.x = 0.15
+                        twist.angular.z = 0.5
                 else:
                     # Just right, cruise forward
                     twist.linear.x = 0.25

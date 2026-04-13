@@ -22,14 +22,18 @@ class SensorNode(Node):
         
         self.current_state = "EXPLORING"
         self.wall_threshold = 0.4  # Starts wall following if distance < 0.4
+        self.last_switch_time = self.get_clock().now().nanoseconds / 1e9
+
         
         # Publish state continuously at 10Hz
         self.timer = self.create_timer(0.1, self.publish_state)
         self.get_logger().info("Sensor node started.")
 
     def resume_callback(self, msg):
+        current_time = self.get_clock().now().nanoseconds / 1e9
         if msg.data and self.current_state == "WALL_FOLLOWING":
             self.current_state = "EXPLORING"
+            self.last_switch_time = current_time
             self.get_logger().info("Sensor Node: Resuming EXPLORING mode.")
 
     def scan_callback(self, msg):
@@ -50,9 +54,12 @@ class SensorNode(Node):
         front_ranges = noisy_ranges[0:5] + noisy_ranges[355:360]
         min_front_dist = min(front_ranges)
         
+        current_time = self.get_clock().now().nanoseconds / 1e9
         if self.current_state == "EXPLORING" and min_front_dist < self.wall_threshold:
-            self.current_state = "WALL_FOLLOWING"
-            self.get_logger().info(f"Sensor Node: Wall detected at {min_front_dist:.2f}m. Switching to WALL_FOLLOWING.")
+            if current_time - self.last_switch_time > 1.5:  # Cooldown
+                self.current_state = "WALL_FOLLOWING"
+                self.last_switch_time = current_time
+                self.get_logger().info(f"Sensor Node: Wall detected at {min_front_dist:.2f}m. Switching to WALL_FOLLOWING.")
 
     def publish_state(self):
         msg = String()

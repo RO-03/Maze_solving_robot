@@ -131,8 +131,12 @@ class Bug2BaselineNode(Node):
                     twist.linear.x = 0.2
                     twist.angular.z = -0.3
                 elif self.scan_left > 0.45:
-                    twist.linear.x = 0.15
-                    twist.angular.z = 0.5
+                    if self.scan_left > 1.0:
+                        twist.linear.x = 0.05
+                        twist.angular.z = 0.8
+                    else:
+                        twist.linear.x = 0.15
+                        twist.angular.z = 0.5
                 else:
                     twist.linear.x = 0.25
                     twist.angular.z = 0.0
