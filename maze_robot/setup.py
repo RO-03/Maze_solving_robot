@@ -34,6 +34,7 @@ setup(
             'hybrid_algorithm_node = maze_robot.hybrid_algorithm_node:main',
             'bug2_baseline_node = maze_robot.bug2_baseline_node:main',
             'logger_node = maze_robot.logger_node:main',
+            'frontier_node = maze_robot.frontier_node:main',
         ],
     },
 )

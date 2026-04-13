@@ -1,51 +1,43 @@
 #!/usr/bin/env python3
 import rclpy
 from rclpy.node import Node
-from geometry_msgs.msg import Twist
+from geometry_msgs.msg import Twist, PoseStamped
 from nav_msgs.msg import Odometry
 from sensor_msgs.msg import LaserScan
 import math
+import random
+
 
 class HybridNode(Node):
     def __init__(self):
         super().__init__('hybrid_node')
 
-        # Parameters
-        self.declare_parameter('goal_x', 0.0)
-        self.declare_parameter('goal_y', 4.0)
-        self.goal_x = self.get_parameter('goal_x').value
-        self.goal_y = self.get_parameter('goal_y').value
+        # Goal received from frontier_node via /goal_pose
+        # Start at current position so robot waits for first frontier goal
+        self.goal_x = 0.0
+        self.goal_y = 0.0
+        self._goal_received = False
 
-        # Subscribers
         self.create_subscription(Odometry, '/odom', self.odom_callback, 10)
         self.create_subscription(LaserScan, '/scan', self.scan_callback, 10)
+        self.create_subscription(PoseStamped, '/goal_pose', self.goal_callback, 10)
 
-        # Publisher
         self.cmd_pub = self.create_publisher(Twist, '/cmd_vel', 10)
 
-        # Robot state
         self.x = 0.0
         self.y = 0.0
         self.yaw = 0.0
 
-        self.start_x = None
-        self.start_y = None
-
-        # Sensor data
         self.scan_front = 10.0
         self.scan_left = 10.0
+        self.scan_right = 10.0
 
-        # Modes
         self.mode = "NAV"
 
-        # Bug2 variables
-        self.hit_point_dist = float('inf')
-        self.m_line_len = 1.0
-
-        # Stability helpers
         self.blocked_counter = 0
         self.stuck_counter = 0
-        self.prev_dist = None
+        self.prev_x = None
+        self.prev_y = None
 
         self.create_timer(0.05, self.control_loop)
 
@@ -57,15 +49,6 @@ class HybridNode(Node):
         self.y = msg.pose.pose.position.y
         self.yaw = self.euler_from_quaternion(msg.pose.pose.orientation)
 
-        # Set start point once
-        if self.start_x is None:
-            self.start_x = self.x
-            self.start_y = self.y
-            self.m_line_len = math.hypot(
-                self.goal_x - self.start_x,
-                self.goal_y - self.start_y
-            )
-
     def scan_callback(self, msg):
         def avg(r):
             r = [x for x in r if not math.isinf(x)]
@@ -73,94 +56,95 @@ class HybridNode(Node):
 
         self.scan_front = avg(list(msg.ranges[0:5]) + list(msg.ranges[355:360]))
         self.scan_left = avg(msg.ranges[85:95])
+        self.scan_right = avg(msg.ranges[265:275])
 
     def distance_to_goal(self):
         return math.hypot(self.goal_x - self.x, self.goal_y - self.y)
 
-    def distance_to_m_line(self):
-        if self.m_line_len == 0:
-            return 0.0
-        return abs(
-            (self.goal_y - self.start_y)*(self.x - self.start_x) -
-            (self.goal_x - self.start_x)*(self.y - self.start_y)
-        ) / self.m_line_len
+    # 🗺️ Callback: goal from frontier_node
+    def goal_callback(self, msg):
+        # If we recently chose a fallback goal, ignore frontier temporarily 
+        # so we actually have time to escape
+        if getattr(self, 'ignore_frontier_cycles', 0) > 0:
+            return
+
+        self.goal_x = msg.pose.position.x
+        self.goal_y = msg.pose.position.y
+        self._goal_received = True
+        self.get_logger().debug(
+            f'[FRONTIER] New goal received → x={self.goal_x:.2f}, y={self.goal_y:.2f}'
+        )
+
+    # 🔥 Fallback: random escape if stuck
+    def choose_new_goal(self):
+        angle = random.uniform(-math.pi, math.pi)
+        dist = 2.0
+        self.goal_x = self.x + dist * math.cos(angle)
+        self.goal_y = self.y + dist * math.sin(angle)
+        self.ignore_frontier_cycles = 100  # ignore frontier for ~5 seconds (at 20Hz)
+        self.get_logger().info(f'[FALLBACK] Stuck! Random escape goal: {self.goal_x:.2f}, {self.goal_y:.2f}')
 
     def control_loop(self):
         twist = Twist()
 
-        # Goal reached
-        if self.distance_to_goal() < 0.3:
-            self.cmd_pub.publish(Twist())
-            self.get_logger().info("GOAL REACHED")
+        if getattr(self, 'ignore_frontier_cycles', 0) > 0:
+            self.ignore_frontier_cycles -= 1
+
+        # Wait for first frontier goal before moving
+        if not self._goal_received:
+            self.cmd_pub.publish(twist)  # publish zero velocity
             return
 
-        # 🔥 MODE SWITCHING
-        if self.scan_front < 0.4:
+        # GOAL REACHED — stop moving and wait for new goal
+        if self.distance_to_goal() < 0.4:
+            self.cmd_pub.publish(twist)  # STOP completely!
+            return
+
+        # OBSTACLE DETECTION
+        if self.scan_front < 0.35:
             self.blocked_counter += 1
         else:
             self.blocked_counter = 0
 
-        if self.blocked_counter > 5:
-            if self.mode != "BUG2":
-                self.mode = "BUG2"
-                self.hit_point_dist = self.distance_to_goal()
-
-        # 🔁 EXIT BUG2
-        if self.mode == "BUG2":
-            if (self.distance_to_m_line() < 0.25 and
-                self.distance_to_goal() < self.hit_point_dist - 0.3):
-                self.mode = "NAV"
-                return
-
-            # Escape condition
-            if self.distance_to_goal() < self.hit_point_dist - 0.5:
-                self.mode = "NAV"
-                return
-
-        # 🟢 NAV MODE
-        if self.mode == "NAV":
-            angle = math.atan2(self.goal_y - self.y, self.goal_x - self.x)
-            diff = angle - self.yaw
-
-            while diff > math.pi:
-                diff -= 2 * math.pi
-            while diff < -math.pi:
-                diff += 2 * math.pi
-
-            twist.angular.z = 0.5 * diff
-            twist.linear.x = 0.25
-
-        # 🔵 BUG2 MODE
-        elif self.mode == "BUG2":
-            if self.scan_front < 0.4:
-                twist.angular.z = -0.8
-                twist.linear.x = 0.0
-            else:
-                if self.scan_left < 0.3:
-                    twist.linear.x = 0.15
-                    twist.angular.z = -0.3
-                elif self.scan_left > 0.5:
-                    twist.linear.x = 0.15
-                    twist.angular.z = 0.4
-                else:
-                    twist.linear.x = 0.15
-
-        # 🔴 STUCK DETECTION
-        if self.prev_dist is not None:
-            if abs(self.distance_to_goal() - self.prev_dist) < 0.005:
+        # STUCK DETECTION (movement-based)
+        if self.prev_x is not None:
+            if math.hypot(self.x - self.prev_x, self.y - self.prev_y) < 0.01:
                 self.stuck_counter += 1
             else:
                 self.stuck_counter = 0
 
-        if self.stuck_counter > 20:
+        self.prev_x = self.x
+        self.prev_y = self.y
+
+        # 🔥 IF STUCK → NEW FRONTIER GOAL
+        if self.stuck_counter > 40:
+            self.choose_new_goal()
+            self.stuck_counter = 0
+
+        # NAVIGATION
+        angle = math.atan2(self.goal_y - self.y, self.goal_x - self.x)
+        diff = angle - self.yaw
+
+        while diff > math.pi:
+            diff -= 2 * math.pi
+        while diff < -math.pi:
+            diff += 2 * math.pi
+
+        # 🔵 BUG2-LIKE OBSTACLE AVOIDANCE
+        if self.scan_front < 0.4:
+            # ONLY pivot! Do NOT move forward here, otherwise we get wedged into the wall
             twist.angular.z = 0.8
             twist.linear.x = 0.0
 
-        self.prev_dist = self.distance_to_goal()
+        else:
+            # steer based on free space
+            if self.scan_left > self.scan_right:
+                twist.angular.z = 0.3
+            else:
+                twist.angular.z = -0.3
 
-        # 🔒 SAFETY CLAMP
-        twist.linear.x = max(min(twist.linear.x, 0.3), -0.3)
-        twist.angular.z = max(min(twist.angular.z, 1.0), -1.0)
+            twist.angular.z += 0.5 * diff
+            twist.linear.x = 0.2
 
         self.cmd_pub.publish(twist)
 

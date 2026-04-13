@@ -218,3 +218,25 @@ results/experiment_results.csv   # Maze, Algorithm, Time, PathLength, Collisions
 This project was developed as part of a university robotics course.
 
 *Platform: ROS2 Jazzy | Gazebo Harmonic | Ubuntu 24.04*
+
+
+Terminal 1: Simulation & Controller
+bash
+cd ~/Documents/MAR_project
+source install/setup.bash
+ros2 launch maze_robot complex_maze_hybrid.launch.py
+
+
+Terminal 2: SLAM Mapping
+bash
+cd ~/Documents/MAR_project
+source install/setup.bash
+ros2 launch slam_toolbox online_async_launch.py use_sim_time:=true
+
+
+Terminal 3: Frontier Exploration
+bash
+cd ~/Documents/MAR_project
+source install/setup.bash
+ros2 run maze_robot frontier_node
+Now watch RViz. The robot should pivot cleanly when it meets a wall and keep exploring!
