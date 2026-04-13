@@ -169,7 +169,7 @@
       <frame_id>odom</frame_id>
       <child_frame_id>base_footprint</child_frame_id>
       <!-- Publish TF from odom → base_footprint -->
-      <tf_topic>/tf</tf_topic>
+      <tf_topic>/model/maze_robot/tf</tf_topic>
     </plugin>
   </gazebo>
 
@@ -179,7 +179,7 @@
             name="gz::sim::systems::JointStatePublisher">
       <topic>/joint_states</topic>
       <joint_name>left_wheel_joint</joint_name>
-      <joint_name>right_wheel_joint</right_joint_name>
+      <joint_name>right_wheel_joint</joint_name>
     </plugin>
   </gazebo>
 

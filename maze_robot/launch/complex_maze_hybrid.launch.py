@@ -17,8 +17,10 @@ Full autonomous exploration launch for the complex maze:
 import os
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import ExecuteProcess, TimerAction
+from launch.actions import ExecuteProcess, TimerAction, IncludeLaunchDescription
+from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import Command
+from launch_ros.parameter_descriptions import ParameterValue
 from launch_ros.actions import Node
 
 
@@ -58,7 +60,7 @@ def generate_launch_description():
         executable='robot_state_publisher',
         output='screen',
         parameters=[{
-            'robot_description': Command(['xacro ', urdf_path]),
+            'robot_description': ParameterValue(Command(['xacro ', urdf_path]), value_type=str),
             'use_sim_time': True,
         }],
     )
@@ -95,23 +97,12 @@ def generate_launch_description():
     )
 
     # ── SLAM Toolbox (async online – builds /map live) ────────────────────
-    slam = Node(
-        package='slam_toolbox',
-        executable='async_slam_toolbox_node',
-        name='slam_toolbox',
-        output='screen',
-        parameters=[{
-            'use_sim_time':          True,
-            'odom_frame':            'odom',
-            'map_frame':             'map',
-            'base_frame':            'base_footprint',
-            'scan_topic':            '/scan',
-            'mode':                  'mapping',
-            'resolution':            0.05,
-            'max_laser_range':       10.0,
-            'minimum_travel_distance': 0.1,
-            'minimum_travel_heading':  0.1,
-        }],
+    slam = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(
+            os.path.join(get_package_share_directory('slam_toolbox'),
+                         'launch', 'online_async_launch.py')
+        ),
+        launch_arguments={'use_sim_time': 'true'}.items()
     )
 
     # ── Sensor node (state machine: EXPLORING ↔ WALL_FOLLOWING) ──────────

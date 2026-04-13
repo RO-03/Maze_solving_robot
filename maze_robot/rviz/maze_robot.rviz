@@ -183,7 +183,7 @@ Visualization Manager:
       Update Interval: 0
       Value: true
       Visual Enabled: true
-    - Class: rviz_default_plugins/PoseStamped
+    - Class: rviz_default_plugins/Pose
       Arrow Length: 0.5
       Color: 255; 25; 0
       Enabled: true
