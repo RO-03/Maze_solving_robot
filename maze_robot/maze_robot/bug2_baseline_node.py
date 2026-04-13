@@ -155,21 +155,19 @@ class Bug2BaselineNode(Node):
             if self.front < 0.40:
                 twist.linear.x  = 0.0
                 twist.angular.z = -0.6
-            elif self.front_right < 0.32:
-                twist.linear.x  = 0.10
-                twist.angular.z = 0.4
+            elif self.left > self.WALL_FAR:
+                # Outer corner: turn left to round it
+                twist.linear.x  = 0.12
+                twist.angular.z = 0.55
             elif self.left < self.WALL_CLOSE:
                 twist.linear.x  = 0.15
                 twist.angular.z = -0.3
             elif self.left <= self.WALL_GOOD:
                 twist.linear.x  = 0.25
                 twist.angular.z = 0.0
-            elif self.left <= self.WALL_FAR:
+            else:
                 twist.linear.x  = 0.20
                 twist.angular.z = 0.35
-            else:
-                twist.linear.x  = 0.25
-                twist.angular.z = 0.0
 
         self.cmd_pub.publish(twist)
 

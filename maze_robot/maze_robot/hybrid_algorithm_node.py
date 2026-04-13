@@ -1,14 +1,19 @@
 #!/usr/bin/env python3
 """
 Self-contained Hybrid Bug2 + Frontier algorithm.
-All state (EXPLORING / WALL_FOLLOWING) is managed exclusively inside this
-node — no dependency on sensor_node for state decisions.
+All state (EXPLORING / WALL_FOLLOWING) managed exclusively inside this node.
 
-Bug2 exit rule (textbook):
-  • The robot is wall-following AND
-  • has traveled ≥ MIN_WF_DIST from the hit-point, AND
-  • is within M_THRESH of the M-line (start → goal), AND
-  • is closer to the goal than it was at the hit-point.
+Left-hand wall follower with correct outer-corner handling:
+  Priority 1 : front blocked             → turn right (CW)
+  Priority 2 : no left wall (outer corner) → turn left + forward (CCW)
+  Priority 3 : left wall too close       → nudge right
+  Priority 4 : left wall sweet spot      → cruise straight
+  Priority 5 : drifting from left wall   → nudge left
+
+Bug2 M-line exit:
+  • Traveled ≥ MIN_WF_DIST from hit-point, AND
+  • perpendicular distance to M-line < M_THRESH, AND
+  • closer to goal than at hit-point
 """
 import rclpy
 from rclpy.node import Node
@@ -45,27 +50,26 @@ class HybridAlgorithmNode(Node):
         self.y   = 0.0
         self.yaw = 0.0
 
-        # ── Laser readings (m) ─────────────────────────────────────────
+        # ── Laser readings (m) — min distance in each sector ───────────
         self.front       = 10.0   # 0° ± 12°
         self.front_left  = 10.0   # ~45°
         self.left        = 10.0   # 90° ± 10°
         self.front_right = 10.0   # ~315°
-        self.right       = 10.0   # 270° ± 10°
 
         # ── Bug2 state ──────────────────────────────────────────────────
         self.state            = 'EXPLORING'
         self.hit_x            = 0.0
         self.hit_y            = 0.0
         self.hit_dist_goal    = float('inf')
-        self.dist_traveled_wf = 0.0   # odometry distance travelled while wall-following
+        self.dist_traveled_wf = 0.0
 
-        # ── Tuning constants ────────────────────────────────────────────
-        self.OBS_THRESH  = 0.42   # front-obstacle threshold (m)
-        self.WALL_CLOSE  = 0.28   # left wall: too close
-        self.WALL_GOOD   = 0.42   # left wall: sweet-spot upper bound
-        self.WALL_FAR    = 0.62   # left wall: losing contact
-        self.M_THRESH    = 0.14   # "on M-line" tolerance (m)
-        self.MIN_WF_DIST = 0.80   # minimum wall-follow travel before exit check
+        # ── Tuning ──────────────────────────────────────────────────────
+        self.OBS_THRESH  = 0.40   # obstacle trigger for front
+        self.WALL_CLOSE  = 0.25   # left wall: too close
+        self.WALL_GOOD   = 0.40   # left wall: sweet-spot upper bound
+        self.WALL_FAR    = 0.60   # left wall: outer-corner threshold
+        self.M_THRESH    = 0.15   # "on M-line" tolerance (m)
+        self.MIN_WF_DIST = 0.80   # min wall-follow travel before exit check
 
         # ── Performance tracking ────────────────────────────────────────
         self.path_msg          = Path()
@@ -79,12 +83,12 @@ class HybridAlgorithmNode(Node):
         self.goal_reached      = False
         self.coll_cooldown     = False
 
-        # M-line: straight line from origin (0,0) to (goal_x, goal_y)
+        # M-line: straight line from (0,0) to (goal_x, goal_y)
         self.m_len = math.hypot(self.goal_x, self.goal_y)
 
-        self.create_timer(0.05, self._loop)  # 20 Hz control loop
+        self.create_timer(0.05, self._loop)   # 20 Hz
 
-    # ────────────────────────────── Callbacks ───────────────────────────
+    # ────────────────────────── Callbacks ───────────────────────────────
 
     def _yaw(self, q):
         return math.atan2(2*(q.w*q.z + q.x*q.y),
@@ -121,7 +125,6 @@ class HybridAlgorithmNode(Node):
         self.front_left  = _min(range(40, 55))
         self.left        = _min(range(80, 100))
         self.front_right = _min(range(n-55, n-40))
-        self.right       = _min(range(260, 280))
 
         if self.front < 0.15 and not self.coll_cooldown:
             self.wall_collisions += 1
@@ -129,19 +132,16 @@ class HybridAlgorithmNode(Node):
         elif self.front > 0.25:
             self.coll_cooldown = False
 
-    # ────────────────────────────── Helpers ─────────────────────────────
+    # ────────────────────────── Helpers ─────────────────────────────────
 
     def _dist_goal(self):
         return math.hypot(self.goal_x - self.x, self.goal_y - self.y)
 
     def _dist_m_line(self):
-        """Perpendicular distance from (x,y) to the line (0,0)→(goal_x,goal_y)."""
+        """Perpendicular distance from (x,y) to line (0,0)→(goal_x,goal_y)."""
         if self.m_len == 0:
             return 0.0
         return abs(self.goal_x * self.y - self.goal_y * self.x) / self.m_len
-
-    def _dist_from_hit(self):
-        return math.hypot(self.x - self.hit_x, self.y - self.hit_y)
 
     def _norm(self, a):
         while a >  math.pi: a -= 2*math.pi
@@ -152,7 +152,52 @@ class HybridAlgorithmNode(Node):
         m = String(); m.data = s
         self.state_pub.publish(m)
 
-    # ────────────────────────────── Control loop ─────────────────────────
+    # ────────────────── Left-hand wall follower ──────────────────────────
+
+    def _wall_follow(self):
+        """
+        Classic left-hand rule with correct outer-corner handling.
+
+        Priority order:
+          1. Front blocked            → turn right (CW) in place
+          2. Left wall gone (corner)  → turn left + forward  ← KEY FIX
+          3. Left too close           → nudge right
+          4. Left sweet-spot          → cruise straight
+          5. Drifting from left wall  → nudge left
+        """
+        twist = Twist()
+
+        if self.front < self.OBS_THRESH:
+            # Obstacle ahead — rotate right until clear
+            twist.linear.x  = 0.0
+            twist.angular.z = -0.6
+
+        elif self.left > self.WALL_FAR:
+            # ── OUTER CORNER ─────────────────────────────────────────
+            # Left wall has disappeared: robot has gone past the end of
+            # a wall segment.  Turn LEFT while creeping forward so it
+            # rounds the corner and re-acquires the wall.
+            twist.linear.x  = 0.12
+            twist.angular.z = 0.55
+
+        elif self.left < self.WALL_CLOSE:
+            # Too close — nudge right
+            twist.linear.x  = 0.15
+            twist.angular.z = -0.3
+
+        elif self.left <= self.WALL_GOOD:
+            # Sweet spot — cruise straight
+            twist.linear.x  = 0.25
+            twist.angular.z = 0.0
+
+        else:
+            # WALL_GOOD < left ≤ WALL_FAR: drifting, gentle left
+            twist.linear.x  = 0.20
+            twist.angular.z = 0.35
+
+        return twist
+
+    # ────────────────────────── Control loop ─────────────────────────────
 
     def _loop(self):
         if self.goal_reached:
@@ -170,7 +215,7 @@ class HybridAlgorithmNode(Node):
             sm = String(); sm.data = log
             self.log_pub.publish(sm)
             self.get_logger().info(
-                f"GOAL REACHED! Time={elapsed:.1f}s  Path={self.total_path_length:.1f}m")
+                f"GOAL REACHED!  Time={elapsed:.1f}s  Path={self.total_path_length:.1f}m")
             return
 
         twist = Twist()
@@ -178,19 +223,20 @@ class HybridAlgorithmNode(Node):
         # ── EXPLORING ───────────────────────────────────────────────────
         if self.state == 'EXPLORING':
             if self.front < self.OBS_THRESH:
-                # Hit wall → record and switch
+                # Record hit point and switch
                 self.hit_x, self.hit_y = self.x, self.y
-                self.hit_dist_goal    = self._dist_goal()
-                self.dist_traveled_wf = 0.0
-                self.mode_switches   += 1
-                self.state            = 'WALL_FOLLOWING'
+                self.hit_dist_goal     = self._dist_goal()
+                self.dist_traveled_wf  = 0.0
+                self.mode_switches    += 1
+                self.state             = 'WALL_FOLLOWING'
                 self._pub_state('WALL_FOLLOWING')
                 self.get_logger().info(
                     f"WALL HIT → WALL_FOLLOWING  d_goal={self.hit_dist_goal:.2f}")
+                # Start turning right immediately
                 twist.linear.x  = 0.0
-                twist.angular.z = -0.6   # start turning right immediately
+                twist.angular.z = -0.6
             else:
-                # Steer toward goal (proportional heading controller)
+                # Steer toward goal (proportional controller)
                 angle_to_goal = math.atan2(
                     self.goal_y - self.y, self.goal_x - self.x)
                 err = self._norm(angle_to_goal - self.yaw)
@@ -203,10 +249,10 @@ class HybridAlgorithmNode(Node):
 
         # ── WALL_FOLLOWING ──────────────────────────────────────────────
         else:
-            # Bug2 exit condition
             d_m = self._dist_m_line()
             d_g = self._dist_goal()
 
+            # Bug2 exit condition
             if (self.dist_traveled_wf > self.MIN_WF_DIST
                     and d_m < self.M_THRESH
                     and d_g < self.hit_dist_goal - 0.20):
@@ -218,26 +264,7 @@ class HybridAlgorithmNode(Node):
                 twist.linear.x  = 0.10
                 twist.angular.z = 0.0
             else:
-                # ── Left-hand wall follower ──────────────────────────────
-                if self.front < 0.40:
-                    twist.linear.x  = 0.0
-                    twist.angular.z = -0.6
-                elif self.front_right < 0.32:
-                    twist.linear.x  = 0.10
-                    twist.angular.z = 0.4
-                elif self.left < self.WALL_CLOSE:
-                    twist.linear.x  = 0.15
-                    twist.angular.z = -0.3
-                elif self.left <= self.WALL_GOOD:
-                    twist.linear.x  = 0.25
-                    twist.angular.z = 0.0
-                elif self.left <= self.WALL_FAR:
-                    twist.linear.x  = 0.20
-                    twist.angular.z = 0.35
-                else:
-                    # No wall on left — open corridor, keep going straight
-                    twist.linear.x  = 0.25
-                    twist.angular.z = 0.0
+                twist = self._wall_follow()
 
         self.cmd_pub.publish(twist)
 
