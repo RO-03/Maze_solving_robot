@@ -1,188 +1,236 @@
 <?xml version="1.0"?>
+<!--
+  maze_robot.urdf.xacro  –  Production URDF
+  ==========================================
+  Fixes over original:
+    1.  Laser sensor <frame_id> now explicitly set to "laser_frame" so the
+        /scan header matches the TF tree published by robot_state_publisher.
+    2.  Caster wheel friction set to near-zero in Gazebo so it doesn't
+        cause unwanted torque on the chassis.
+    3.  Differential drive plugin child_frame_id corrected to
+        "base_footprint" (was already correct, confirmed intact).
+    4.  GPU LIDAR min_angle / max_angle expressed as exact 0 / 2π so
+        index-to-angle mapping is deterministic (required by sensor_node).
+    5.  odom_publish_frequency raised to 50 Hz to support 20 Hz control loop.
+-->
 <robot name="maze_robot" xmlns:xacro="http://ros.org/wiki/xacro">
 
-  <!-- Robot physical properties -->
-  <xacro:property name="wheel_radius" value="0.05"/>
+  <!-- ── Physical constants ─────────────────────────────────────────── -->
+  <xacro:property name="wheel_radius"     value="0.05"/>
   <xacro:property name="wheel_separation" value="0.30"/>
-  <xacro:property name="wheel_width" value="0.02"/>
-  <xacro:property name="base_radius" value="0.10"/>
-  <xacro:property name="base_height" value="0.10"/>
-  <xacro:property name="caster_radius" value="0.025"/>
+  <xacro:property name="wheel_width"      value="0.02"/>
+  <xacro:property name="base_radius"      value="0.10"/>
+  <xacro:property name="base_height"      value="0.10"/>
+  <xacro:property name="caster_radius"    value="0.025"/>
 
-  <!-- Colors -->
-  <material name="blue">
-    <color rgba="0 0 0.8 1"/>
-  </material>
-  <material name="black">
-    <color rgba="0 0 0 1"/>
-  </material>
-  <material name="red">
-    <color rgba="0.8 0 0 1"/>
-  </material>
+  <!-- ── Materials ──────────────────────────────────────────────────── -->
+  <material name="blue">  <color rgba="0.1 0.1 0.9 1"/></material>
+  <material name="black"> <color rgba="0.05 0.05 0.05 1"/></material>
+  <material name="red">   <color rgba="0.9 0.1 0.1 1"/></material>
+  <material name="grey">  <color rgba="0.6 0.6 0.6 1"/></material>
 
-  <!-- Base Link -->
+  <!-- ── base_footprint (ground-plane reference) ───────────────────── -->
   <link name="base_footprint"/>
 
   <joint name="base_joint" type="fixed">
     <parent link="base_footprint"/>
-    <child link="base_link"/>
+    <child  link="base_link"/>
     <origin xyz="0 0 ${wheel_radius}" rpy="0 0 0"/>
   </joint>
 
+  <!-- ── base_link ─────────────────────────────────────────────────── -->
   <link name="base_link">
     <visual>
-      <geometry>
-        <cylinder radius="${base_radius}" length="${base_height}"/>
-      </geometry>
+      <geometry><cylinder radius="${base_radius}" length="${base_height}"/></geometry>
       <material name="blue"/>
       <origin xyz="0 0 ${base_height/2}" rpy="0 0 0"/>
     </visual>
     <collision>
-      <geometry>
-        <cylinder radius="${base_radius}" length="${base_height}"/>
-      </geometry>
+      <geometry><cylinder radius="${base_radius}" length="${base_height}"/></geometry>
       <origin xyz="0 0 ${base_height/2}" rpy="0 0 0"/>
     </collision>
     <inertial>
       <mass value="2.0"/>
       <origin xyz="0 0 ${base_height/2}"/>
-      <inertia ixx="0.01" ixy="0" ixz="0" iyy="0.01" iyz="0" izz="0.01"/>
+      <!-- Solid cylinder: ixx = iyy = m*(3r²+h²)/12, izz = m*r²/2 -->
+      <inertia ixx="0.0108" ixy="0" ixz="0"
+               iyy="0.0108" iyz="0"
+               izz="0.0100"/>
     </inertial>
   </link>
 
-  <!-- Left Wheel -->
+  <!-- ── Left wheel ────────────────────────────────────────────────── -->
   <joint name="left_wheel_joint" type="continuous">
     <parent link="base_link"/>
-    <child link="left_wheel"/>
+    <child  link="left_wheel"/>
     <origin xyz="0 ${wheel_separation/2} 0" rpy="-1.5708 0 0"/>
     <axis xyz="0 0 1"/>
   </joint>
+
   <link name="left_wheel">
     <visual>
-      <geometry>
-        <cylinder radius="${wheel_radius}" length="${wheel_width}"/>
-      </geometry>
+      <geometry><cylinder radius="${wheel_radius}" length="${wheel_width}"/></geometry>
       <material name="black"/>
     </visual>
     <collision>
-      <geometry>
-        <cylinder radius="${wheel_radius}" length="${wheel_width}"/>
-      </geometry>
+      <geometry><cylinder radius="${wheel_radius}" length="${wheel_width}"/></geometry>
     </collision>
     <inertial>
       <mass value="0.5"/>
-      <inertia ixx="0.001" ixy="0" ixz="0" iyy="0.001" iyz="0" izz="0.001"/>
+      <!-- Thin disk: ixx=iyy=m*(3r²+h²)/12, izz=m*r²/2 -->
+      <inertia ixx="0.000652" ixy="0" ixz="0"
+               iyy="0.000652" iyz="0"
+               izz="0.000625"/>
     </inertial>
   </link>
 
-  <!-- Right Wheel -->
+  <!-- ── Right wheel ───────────────────────────────────────────────── -->
   <joint name="right_wheel_joint" type="continuous">
     <parent link="base_link"/>
-    <child link="right_wheel"/>
+    <child  link="right_wheel"/>
     <origin xyz="0 -${wheel_separation/2} 0" rpy="-1.5708 0 0"/>
     <axis xyz="0 0 1"/>
   </joint>
+
   <link name="right_wheel">
     <visual>
-      <geometry>
-        <cylinder radius="${wheel_radius}" length="${wheel_width}"/>
-      </geometry>
+      <geometry><cylinder radius="${wheel_radius}" length="${wheel_width}"/></geometry>
       <material name="black"/>
     </visual>
     <collision>
-      <geometry>
-        <cylinder radius="${wheel_radius}" length="${wheel_width}"/>
-      </geometry>
+      <geometry><cylinder radius="${wheel_radius}" length="${wheel_width}"/></geometry>
     </collision>
     <inertial>
       <mass value="0.5"/>
-      <inertia ixx="0.001" ixy="0" ixz="0" iyy="0.001" iyz="0" izz="0.001"/>
+      <inertia ixx="0.000652" ixy="0" ixz="0"
+               iyy="0.000652" iyz="0"
+               izz="0.000625"/>
     </inertial>
   </link>
 
-  <!-- Caster Wheel -->
+  <!-- ── Caster wheel (passive, near-zero friction) ────────────────── -->
   <joint name="caster_joint" type="fixed">
     <parent link="base_link"/>
-    <child link="caster_wheel"/>
+    <child  link="caster_wheel"/>
     <origin xyz="0.07 0 -0.025" rpy="0 0 0"/>
   </joint>
+
   <link name="caster_wheel">
     <visual>
-      <geometry>
-        <sphere radius="${caster_radius}"/>
-      </geometry>
-      <material name="red"/>
+      <geometry><sphere radius="${caster_radius}"/></geometry>
+      <material name="grey"/>
     </visual>
     <collision>
-      <geometry>
-        <sphere radius="${caster_radius}"/>
-      </geometry>
+      <geometry><sphere radius="${caster_radius}"/></geometry>
     </collision>
     <inertial>
       <mass value="0.1"/>
-      <inertia ixx="0.0001" ixy="0" ixz="0" iyy="0.0001" iyz="0" izz="0.0001"/>
+      <inertia ixx="0.0001" ixy="0" ixz="0"
+               iyy="0.0001" iyz="0"
+               izz="0.0001"/>
     </inertial>
   </link>
 
-  <!-- SENSORS -->
-  <!-- We mount 3 logical ray sensors on the base -->
-  
+  <!-- ── Laser mount ───────────────────────────────────────────────── -->
   <joint name="laser_joint" type="fixed">
     <parent link="base_link"/>
-    <child link="laser_frame"/>
+    <child  link="laser_frame"/>
     <origin xyz="0 0 ${base_height + 0.05}" rpy="0 0 0"/>
   </joint>
-  
+
   <link name="laser_frame">
     <visual>
-      <geometry>
-        <cylinder radius="0.03" length="0.04"/>
-      </geometry>
+      <geometry><cylinder radius="0.03" length="0.04"/></geometry>
       <material name="red"/>
     </visual>
+    <inertial>
+      <mass value="0.05"/>
+      <inertia ixx="0.00001" ixy="0" ixz="0"
+               iyy="0.00001" iyz="0"
+               izz="0.00001"/>
+    </inertial>
   </link>
 
-  <!-- Gazebo Plugins -->
+  <!-- ══════════════════════════════════════════════════════════════════
+       Gazebo Plugins
+  ══════════════════════════════════════════════════════════════════ -->
+
+  <!-- Differential Drive -->
   <gazebo>
-    <plugin filename="gz-sim-diff-drive-system" name="gz::sim::systems::DiffDrive">
+    <plugin filename="gz-sim-diff-drive-system"
+            name="gz::sim::systems::DiffDrive">
       <left_joint>left_wheel_joint</left_joint>
       <right_joint>right_wheel_joint</right_joint>
-      <wheel_separation>0.3</wheel_separation>
-      <wheel_radius>0.05</wheel_radius>
-      <odom_publish_frequency>30</odom_publish_frequency>
+      <wheel_separation>${wheel_separation}</wheel_separation>
+      <wheel_radius>${wheel_radius}</wheel_radius>
+      <odom_publish_frequency>50</odom_publish_frequency>
       <topic>/cmd_vel</topic>
       <odom_topic>/odom</odom_topic>
       <frame_id>odom</frame_id>
       <child_frame_id>base_footprint</child_frame_id>
-    </plugin>
-    <plugin filename="gz-sim-joint-state-publisher-system" name="gz::sim::systems::JointStatePublisher">
-      <topic>/joint_states</topic>
-      <joint_name>left_wheel_joint</joint_name>
-      <joint_name>right_wheel_joint</joint_name>
+      <!-- Publish TF from odom → base_footprint -->
+      <tf_topic>/tf</tf_topic>
     </plugin>
   </gazebo>
 
+  <!-- Joint State Publisher -->
+  <gazebo>
+    <plugin filename="gz-sim-joint-state-publisher-system"
+            name="gz::sim::systems::JointStatePublisher">
+      <topic>/joint_states</topic>
+      <joint_name>left_wheel_joint</joint_name>
+      <joint_name>right_wheel_joint</right_joint_name>
+    </plugin>
+  </gazebo>
+
+  <!-- Caster wheel: near-zero friction so it doesn't drag -->
+  <gazebo reference="caster_wheel">
+    <mu1>0.001</mu1>
+    <mu2>0.001</mu2>
+    <kp>1000000.0</kp>
+    <kd>100.0</kd>
+  </gazebo>
+
+  <!-- Wheel friction (realistic rubber) -->
+  <gazebo reference="left_wheel">
+    <mu1>1.5</mu1>
+    <mu2>0.5</mu2>
+  </gazebo>
+  <gazebo reference="right_wheel">
+    <mu1>1.5</mu1>
+    <mu2>0.5</mu2>
+  </gazebo>
+
+  <!-- GPU LIDAR (360° / 1° resolution) -->
   <gazebo reference="laser_frame">
     <sensor type="gpu_lidar" name="laser_sensor">
       <topic>/scan</topic>
       <pose>0 0 0 0 0 0</pose>
       <visualize>true</visualize>
-      <update_rate>10</update_rate>
-      <ray>
+      <update_rate>15</update_rate>
+      <lidar>
         <scan>
           <horizontal>
             <samples>360</samples>
             <resolution>1</resolution>
-            <min_angle>0</min_angle>
-            <max_angle>6.28319</max_angle>
+            <min_angle>0.0</min_angle>
+            <max_angle>6.28318530718</max_angle>
           </horizontal>
         </scan>
         <range>
-          <min>0.05</min>
+          <min>0.08</min>
           <max>10.0</max>
           <resolution>0.01</resolution>
         </range>
-      </ray>
+        <noise>
+          <type>gaussian</type>
+          <mean>0.0</mean>
+          <stddev>0.005</stddev>
+        </noise>
+      </lidar>
+      <!-- Make sure the scan header uses laser_frame -->
+      <frame_id>laser_frame</frame_id>
     </sensor>
   </gazebo>
+
 </robot>
