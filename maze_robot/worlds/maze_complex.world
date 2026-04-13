@@ -1,0 +1,85 @@
+<?xml version="1.0" ?>
+<sdf version="1.6">
+    <world name="maze_complex">
+    <light type="directional" name="sun">
+      <cast_shadows>true</cast_shadows>
+      <pose>0 0 10 0 0 0</pose>
+      <diffuse>0.8 0.8 0.8 1</diffuse>
+      <specular>0.2 0.2 0.2 1</specular>
+      <attenuation><range>1000</range><constant>0.9</constant><linear>0.01</linear><quadratic>0.001</quadratic></attenuation>
+      <direction>-0.5 0.1 -0.9</direction>
+    </light>
+    <model name="ground_plane">
+      <static>true</static>
+      <link name="link">
+        <collision name="collision"><geometry><plane><normal>0 0 1</normal><size>100 100</size></plane></geometry></collision>
+        <visual name="visual"><geometry><plane><normal>0 0 1</normal><size>100 100</size></plane></geometry>
+          <material><ambient>0.8 0.8 0.8 1</ambient><diffuse>0.8 0.8 0.8 1</diffuse><specular>0.8 0.8 0.8 1</specular></material>
+        </visual>
+      </link>
+    </model>
+    <plugin filename="gz-sim-physics-system" name="gz::sim::systems::Physics"></plugin>
+    <plugin filename="gz-sim-user-commands-system" name="gz::sim::systems::UserCommands"></plugin>
+    <plugin filename="gz-sim-scene-broadcaster-system" name="gz::sim::systems::SceneBroadcaster"></plugin>
+    <plugin filename="gz-sim-sensors-system" name="gz::sim::systems::Sensors"><render_engine>ogre2</render_engine></plugin>
+    <light type="directional" name="sun">
+      <cast_shadows>true</cast_shadows>
+      <pose>0 0 10 0 0 0</pose>
+      <diffuse>0.8 0.8 0.8 1</diffuse>
+      <specular>0.2 0.2 0.2 1</specular>
+      <attenuation><range>1000</range><constant>0.9</constant><linear>0.01</linear><quadratic>0.001</quadratic></attenuation>
+      <direction>-0.5 0.1 -0.9</direction>
+    </light>
+    <model name="ground_plane">
+      <static>true</static>
+      <link name="link">
+        <collision name="collision"><geometry><plane><normal>0 0 1</normal><size>100 100</size></plane></geometry></collision>
+        <visual name="visual"><geometry><plane><normal>0 0 1</normal><size>100 100</size></plane></geometry>
+          <material><ambient>0.8 0.8 0.8 1</ambient><diffuse>0.8 0.8 0.8 1</diffuse><specular>0.8 0.8 0.8 1</specular></material>
+        </visual>
+      </link>
+    </model>
+    <!-- Outer Boundaries -->
+    <model name="wall_outer_left"><pose>-3.0 5.0 0.5 0 0 0</pose><static>true</static><link name="link"><collision name="collision"><geometry><box><size>0.2 12.0 1.0</size></box></geometry></collision><visual name="visual"><geometry><box><size>0.2 12.0 1.0</size></box></geometry><material><ambient>0.2 0.2 0.2 1</ambient></material></visual></link></model>
+    <model name="wall_outer_right"><pose>3.0 5.0 0.5 0 0 0</pose><static>true</static><link name="link"><collision name="collision"><geometry><box><size>0.2 12.0 1.0</size></box></geometry></collision><visual name="visual"><geometry><box><size>0.2 12.0 1.0</size></box></geometry><material><ambient>0.2 0.2 0.2 1</ambient></material></visual></link></model>
+    <model name="wall_outer_bottom"><pose>0 -1.0 0.5 0 0 0</pose><static>true</static><link name="link"><collision name="collision"><geometry><box><size>6.2 0.2 1.0</size></box></geometry></collision><visual name="visual"><geometry><box><size>6.2 0.2 1.0</size></box></geometry><material><ambient>0.2 0.2 0.2 1</ambient></material></visual></link></model>
+    <model name="wall_outer_top"><pose>0 11.0 0.5 0 0 0</pose><static>true</static><link name="link"><collision name="collision"><geometry><box><size>6.2 0.2 1.0</size></box></geometry></collision><visual name="visual"><geometry><box><size>6.2 0.2 1.0</size></box></geometry><material><ambient>0.2 0.2 0.2 1</ambient></material></visual></link></model>
+    <!-- Inner Box Boundaries -->
+    <model name="inner_left"><pose>-1.5 5.0 0.5 0 0 0</pose><static>true</static><link name="link"><collision name="collision"><geometry><box><size>0.2 8.0 1.0</size></box></geometry></collision><visual name="visual"><geometry><box><size>0.2 8.0 1.0</size></box></geometry><material><ambient>0.6 0.2 0.4 1</ambient></material></visual></link></model>
+    <model name="inner_right"><pose>1.5 5.0 0.5 0 0 0</pose><static>true</static><link name="link"><collision name="collision"><geometry><box><size>0.2 8.0 1.0</size></box></geometry></collision><visual name="visual"><geometry><box><size>0.2 8.0 1.0</size></box></geometry><material><ambient>0.6 0.2 0.4 1</ambient></material></visual></link></model>
+    <model name="inner_top"><pose>-0.3 9.0 0.5 0 0 0</pose><static>true</static><link name="link"><collision name="collision"><geometry><box><size>2.6 0.2 1.0</size></box></geometry></collision><visual name="visual"><geometry><box><size>2.6 0.2 1.0</size></box></geometry><material><ambient>0.6 0.2 0.4 1</ambient></material></visual></link></model>
+    <model name="inner_bottom"><pose>0 1.0 0.5 0 0 0</pose><static>true</static><link name="link"><collision name="collision"><geometry><box><size>1.0 0.2 1.0</size></box></geometry></collision><visual name="visual"><geometry><box><size>1.0 0.2 1.0</size></box></geometry><material><ambient>0.6 0.2 0.4 1</ambient></material></visual></link></model>
+    <!-- Outer Corridor Zig-Zag (Between X: 1.5 to 3.0 and -1.5 to -3.0) -->
+    <model name="out_horiz_1"><pose>-2.2 3.0 0.5 0 0 0</pose><static>true</static><link name="link"><collision name="collision"><geometry><box><size>1.6 0.2 1.0</size></box></geometry></collision><visual name="visual"><geometry><box><size>1.6 0.2 1.0</size></box></geometry><material><ambient>0.3 0.3 0.3 1</ambient></material></visual></link></model>
+    <model name="out_horiz_2"><pose>-2.2 6.0 0.5 0 0 0</pose><static>true</static><link name="link"><collision name="collision"><geometry><box><size>1.6 0.2 1.0</size></box></geometry></collision><visual name="visual"><geometry><box><size>1.6 0.2 1.0</size></box></geometry><material><ambient>0.3 0.3 0.3 1</ambient></material></visual></link></model>
+    <model name="out_horiz_3"><pose>-2.4 8.0 0.5 0 0 0</pose><static>true</static><link name="link"><collision name="collision"><geometry><box><size>1.4 0.2 1.0</size></box></geometry></collision><visual name="visual"><geometry><box><size>1.4 0.2 1.0</size></box></geometry><material><ambient>0.3 0.3 0.3 1</ambient></material></visual></link></model>
+    <model name="out_horiz_4"><pose>2.2 2.0 0.5 0 0 0</pose><static>true</static><link name="link"><collision name="collision"><geometry><box><size>1.6 0.2 1.0</size></box></geometry></collision><visual name="visual"><geometry><box><size>1.6 0.2 1.0</size></box></geometry><material><ambient>0.3 0.3 0.3 1</ambient></material></visual></link></model>
+    <model name="out_horiz_5"><pose>2.4 4.0 0.5 0 0 0</pose><static>true</static><link name="link"><collision name="collision"><geometry><box><size>1.4 0.2 1.0</size></box></geometry></collision><visual name="visual"><geometry><box><size>1.4 0.2 1.0</size></box></geometry><material><ambient>0.3 0.3 0.3 1</ambient></material></visual></link></model>
+    <model name="out_horiz_6"><pose>2.2 7.0 0.5 0 0 0</pose><static>true</static><link name="link"><collision name="collision"><geometry><box><size>1.6 0.2 1.0</size></box></geometry></collision><visual name="visual"><geometry><box><size>1.6 0.2 1.0</size></box></geometry><material><ambient>0.3 0.3 0.3 1</ambient></material></visual></link></model>
+    <model name="out_horiz_7"><pose>2.4 9.0 0.5 0 0 0</pose><static>true</static><link name="link"><collision name="collision"><geometry><box><size>1.4 0.2 1.0</size></box></geometry></collision><visual name="visual"><geometry><box><size>1.4 0.2 1.0</size></box></geometry><material><ambient>0.3 0.3 0.3 1</ambient></material></visual></link></model>
+    <!-- Inside the Trap Box -->
+    <model name="in_horiz_1"><pose>-0.2 3.0 0.5 0 0 0</pose><static>true</static><link name="link"><collision name="collision"><geometry><box><size>2.6 0.2 1.0</size></box></geometry></collision><visual name="visual"><geometry><box><size>2.6 0.2 1.0</size></box></geometry><material><ambient>0.6 0.2 0.4 1</ambient></material></visual></link></model>
+    <model name="in_vert_1"><pose>1.1 4.0 0.5 0 0 0</pose><static>true</static><link name="link"><collision name="collision"><geometry><box><size>0.2 2.0 1.0</size></box></geometry></collision><visual name="visual"><geometry><box><size>0.2 2.0 1.0</size></box></geometry><material><ambient>0.6 0.2 0.4 1</ambient></material></visual></link></model>
+    <model name="in_horiz_2"><pose>0.2 5.0 0.5 0 0 0</pose><static>true</static><link name="link"><collision name="collision"><geometry><box><size>2.6 0.2 1.0</size></box></geometry></collision><visual name="visual"><geometry><box><size>2.6 0.2 1.0</size></box></geometry><material><ambient>0.6 0.2 0.4 1</ambient></material></visual></link></model>
+    <model name="in_vert_2"><pose>-1.1 6.0 0.5 0 0 0</pose><static>true</static><link name="link"><collision name="collision"><geometry><box><size>0.2 2.0 1.0</size></box></geometry></collision><visual name="visual"><geometry><box><size>0.2 2.0 1.0</size></box></geometry><material><ambient>0.6 0.2 0.4 1</ambient></material></visual></link></model>
+    <model name="in_horiz_3"><pose>-0.5 7.0 0.5 0 0 0</pose><static>true</static><link name="link"><collision name="collision"><geometry><box><size>2.0 0.2 1.0</size></box></geometry></collision><visual name="visual"><geometry><box><size>2.0 0.2 1.0</size></box></geometry><material><ambient>0.6 0.2 0.4 1</ambient></material></visual></link></model>
+    <!-- Distractors / Extra blocks -->
+    <model name="distract_1"><pose>-2.8 5.0 0.5 0 0 0</pose><static>true</static><link name="link"><collision name="collision"><geometry><box><size>0.2 2.0 1.0</size></box></geometry></collision><visual name="visual"><geometry><box><size>0.2 2.0 1.0</size></box></geometry><material><ambient>0.8 0.8 0.8 1</ambient></material></visual></link></model>
+    <model name="distract_2"><pose>2.8 6.0 0.5 0 0 0</pose><static>true</static><link name="link"><collision name="collision"><geometry><box><size>0.2 2.0 1.0</size></box></geometry></collision><visual name="visual"><geometry><box><size>0.2 2.0 1.0</size></box></geometry><material><ambient>0.8 0.8 0.8 1</ambient></material></visual></link></model>
+    <model name="distract_3"><pose>0 0.5 0.5 0 0 0</pose><static>true</static><link name="link"><collision name="collision"><geometry><box><size>0.6 0.2 1.0</size></box></geometry></collision><visual name="visual"><geometry><box><size>0.6 0.2 1.0</size></box></geometry><material><ambient>0.8 0.8 0.8 1</ambient></material></visual></link></model>
+    <!-- Goal Marker (Green Box) -->
+    <model name="goal_marker">
+      <pose>0.0 8.0 0.25 0 0 0</pose>
+      <static>true</static>
+      <link name="link">
+        <visual name="visual">
+          <geometry><box><size>0.5 0.5 0.5</size></box></geometry>
+          <material>
+            <ambient>0 1 0 1</ambient>
+            <diffuse>0 1 0 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+  </world>
+</sdf>

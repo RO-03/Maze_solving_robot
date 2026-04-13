@@ -1,0 +1,48 @@
+import os
+from ament_index_python.packages import get_package_share_directory
+from launch import LaunchDescription
+from launch.actions import ExecuteProcess, TimerAction
+from launch.substitutions import Command
+from launch_ros.actions import Node
+
+def generate_launch_description():
+    pkg_name = 'maze_robot'
+    pkg_dir = get_package_share_directory(pkg_name)
+    world_path = os.path.join(pkg_dir, 'worlds', 'maze_medium.world')
+    urdf_path  = os.path.join(pkg_dir, 'urdf', 'maze_robot.urdf.xacro')
+    rviz_cfg   = os.path.join(pkg_dir, 'rviz', 'maze_robot.rviz')
+
+    return LaunchDescription([
+        ExecuteProcess(cmd=['gz', 'sim', '-r', world_path], output='screen'),
+        Node(package='ros_gz_bridge', executable='parameter_bridge', output='screen',
+             arguments=[
+                 '/clock@rosgraph_msgs/msg/Clock[gz.msgs.Clock',
+                 '/scan@sensor_msgs/msg/LaserScan[gz.msgs.LaserScan',
+                 '/cmd_vel@geometry_msgs/msg/Twist]gz.msgs.Twist',
+                 '/odom@nav_msgs/msg/Odometry[gz.msgs.Odometry',
+                 '/model/maze_robot/tf@tf2_msgs/msg/TFMessage[gz.msgs.Pose_V',
+                 '/joint_states@sensor_msgs/msg/JointState[gz.msgs.Model',
+             ],
+             remappings=[('/model/maze_robot/tf', '/tf')],
+             parameters=[{'use_sim_time': True}]),
+        Node(package='robot_state_publisher', executable='robot_state_publisher', output='screen',
+             parameters=[{'robot_description': Command(['xacro ', urdf_path]), 'use_sim_time': True}]),
+        Node(package='tf2_ros', executable='static_transform_publisher', output='screen',
+             arguments=['--frame-id', 'laser_frame',
+                        '--child-frame-id', 'maze_robot/base_footprint/laser_sensor',
+                        '--x', '0', '--y', '0', '--z', '0',
+                        '--roll', '0', '--pitch', '0', '--yaw', '0']),
+        TimerAction(period=5.0, actions=[
+            Node(package='ros_gz_sim', executable='create', output='screen',
+                 arguments=['-string', Command(['xacro ', urdf_path]),
+                            '-name', 'maze_robot', '-world', 'maze_medium', '-z', '0.2'])
+        ]),
+        Node(package=pkg_name, executable='sensor_node', output='screen',
+             parameters=[{'noise_std_dev': 0.02, 'use_sim_time': True}]),
+        Node(package=pkg_name, executable='bug2_baseline_node', output='screen',
+             parameters=[{'goal_x': 0.0, 'goal_y': 8.5, 'use_sim_time': True}]),
+        Node(package=pkg_name, executable='logger_node', output='screen',
+             parameters=[{'maze_name': 'medium', 'use_sim_time': True}]),
+        Node(package='rviz2', executable='rviz2', output='screen',
+             arguments=['-d', rviz_cfg], parameters=[{'use_sim_time': True}]),
+    ])

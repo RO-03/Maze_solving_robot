@@ -1,0 +1,54 @@
+# ROS2 / Colcon build artifacts
+build/
+install/
+log/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*.egg-info/
+*.egg
+.eggs/
+
+# Byte-compiled files
+*.pyc
+*.pyo
+*.pyd
+
+# ROS2 bag files
+*.db3
+*.mcap
+*.bag
+*.bag.active
+
+# Gazebo / simulation cache
+.gazebo/
+~/.gazebo/
+*.generated.urdf
+
+# Results and generated data (optional: remove if you want to commit results)
+results/*.png
+results/*.csv
+
+# IDE / Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Environment files
+.env
+*.env
+
+# Temporary files
+/tmp/
+*.tmp
+*.log
+
+# ROS2 specific
+COLCON_IGNORE
+*.dsv
+*.sh.env
